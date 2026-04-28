@@ -1,0 +1,9 @@
+numpy
+pandas
+pyarrow
+umap-learn
+scikit-learn
+torch
+transformers
+librosa
+tqdm
