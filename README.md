@@ -1,6 +1,6 @@
-# Soundscape Data Preprocessing
+# Embeddings Data Preprocessing
 
-Scripts to build the `viz.json` file used by the [soundscape-frontend](https://github.com/catherinepereira/soundscape-frontend) visualization.
+Scripts to build the `viz.json` file used by the [embeddings-playground](https://github.com/catherinepereira/embeddings-playground) visualization.
 
 ## Setup
 
