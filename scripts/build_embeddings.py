@@ -41,12 +41,31 @@ def embed_batch(
     clips: list[np.ndarray],
     device: torch.device,
 ) -> np.ndarray:
-    inputs = processor(audios=clips, sampling_rate=SR, return_tensors="pt", padding=True)
+    inputs = processor(audio=clips, sampling_rate=SR, return_tensors="pt", padding=True)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
-        embs = model.get_audio_features(**inputs)
-    embs = embs / embs.norm(dim=-1, keepdim=True)
+        # transformers 5.x returns a pooled output; pooler_output is the
+        # projected audio embedding, already L2-normalized by the model.
+        out = model.get_audio_features(**inputs)
+    embs = out.pooler_output
     return embs.cpu().numpy()
+
+
+def write_compact(out_npz: Path, ids: np.ndarray, embeddings: np.ndarray, dtype: str) -> None:
+    """Write a flat vector blob plus an id-order sidecar for the web frontend.
+
+    The blob is row-major (N, dim) in little-endian `dtype`; row i belongs to
+    ids[i]. The frontend reads the whole blob once and builds id -> row from the
+    sidecar, so the blob layout does not need to match viz.json point order.
+    """
+    np_dtype = np.dtype(dtype).newbyteorder("<")
+    vec = embeddings.astype(np_dtype, copy=False)
+    blob = out_npz.with_name("vectors.bin")
+    blob.write_bytes(vec.tobytes(order="C"))
+    meta = {"dim": int(embeddings.shape[1]), "dtype": dtype, "count": int(len(ids)),
+            "ids": ids.astype(int).tolist()}
+    out_npz.with_name("vectors.meta.json").write_text(json.dumps(meta, separators=(",", ":")))
+    print(f"Saved compact {dtype} vectors to {blob} ({blob.stat().st_size / 1e6:.1f} MB)")
 
 
 def main() -> None:
@@ -56,6 +75,8 @@ def main() -> None:
     parser.add_argument("--out",       default=str(OUT_DIR / "embeddings.npz"))
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--limit", type=int, default=None, help="Embed only the first N tracks")
+    parser.add_argument("--vector-format", default="float16", choices=["float16", "float32"],
+                        help="dtype for the compact web vector blob")
     args = parser.parse_args()
 
     audio_dir = Path(args.audio_dir)
@@ -120,6 +141,8 @@ def main() -> None:
 
     np.savez(out, ids=ids, embeddings=embeddings)
     print(f"Saved {len(ids)} embeddings to {out} with shape={embeddings.shape}")
+
+    write_compact(out, ids, embeddings, args.vector_format)
 
     if failed:
         fail_path = out.with_suffix(".failed.json")
