@@ -18,7 +18,7 @@ Parses the raw FMA metadata CSVs into `tracks.parquet`
 
 ### 2. `scripts/build_embeddings.py`
 
-Runs each track through the CLAP model (`laion/larger_clap_music_and_speech`) and saves embeddings in 512D. Selects two 20 second clips per track and averages the embeddings to get a more representative vector for the full audio track
+Runs each track through the CLAP model (`laion/larger_clap_music_and_speech`) and saves embeddings in 512D. Takes one 20 second clip from the middle of each track
 
 Outputs:
 
@@ -28,12 +28,12 @@ Outputs:
 
 ### 3. `scripts/build_viz_data.py`
 
-Reduces CLAP embeddings to 2D and 3D with UMAP, maps genres to colors, writes `data/viz.json`, and saves the UMAP models to `data/`
+Reduces CLAP embeddings to 2D and 3D with UMAP, maps genres to colors, writes `data/viz.json`, and saves the UMAP models to `data/`. Also writes `data/genre_vectors.json`, the L2-normalized mean embedding per genre.
 
 ### 4. Copy to the frontend
 
 The frontend serves these from its `public/` directory:
 
 ```bash
-cp data/viz.json data/vectors.bin data/vectors.meta.json ../soundscape-frontend/public/
+cp data/viz.json data/vectors.bin data/vectors.meta.json data/genre_vectors.json ../soundscape-frontend/public/
 ```

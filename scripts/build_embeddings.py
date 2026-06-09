@@ -21,16 +21,14 @@ def get_audio_path(audio_dir: Path, track_id: int) -> Path | None:
     return p if p.exists() else None
 
 
-def load_audio(path: Path) -> list[np.ndarray] | None:
+def load_audio(path: Path) -> np.ndarray | None:
     try:
         import librosa
         duration = librosa.get_duration(path=str(path))
         clip_len = 20.0
-        offset1 = min(5.0, max(0.0, duration - clip_len))
-        clip1, _ = librosa.load(path, sr=SR, mono=True, offset=offset1, duration=clip_len)
-        offset2 = max(offset1, duration / 2 - clip_len / 2)
-        clip2, _ = librosa.load(path, sr=SR, mono=True, offset=offset2, duration=clip_len)
-        return [clip1, clip2]
+        offset = max(0.0, duration / 2 - clip_len / 2)
+        clip, _ = librosa.load(path, sr=SR, mono=True, offset=offset, duration=clip_len)
+        return clip
     except Exception:
         return None
 
@@ -44,8 +42,8 @@ def embed_batch(
     inputs = processor(audio=clips, sampling_rate=SR, return_tensors="pt", padding=True)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
-        # transformers 5.x returns a pooled output; pooler_output is the
-        # projected audio embedding, already L2-normalized by the model.
+        # transformers 5.x returns a pooled output. pooler_output is the
+        # projected audio embedding, already L2-normalized by the model
         out = model.get_audio_features(**inputs)
     embs = out.pooler_output
     return embs.cpu().numpy()
@@ -54,7 +52,7 @@ def embed_batch(
 def write_compact(out_npz: Path, ids: np.ndarray, embeddings: np.ndarray, dtype: str) -> None:
     """Write a flat vector blob plus an id-order sidecar for the web frontend.
 
-    The blob is row-major (N, dim) in little-endian `dtype`; row i belongs to
+    The blob is row-major (N, dim) in little-endian `dtype`, row i belongs to
     ids[i]. The frontend reads the whole blob once and builds id -> row from the
     sidecar, so the blob layout does not need to match viz.json point order.
     """
@@ -108,12 +106,8 @@ def main() -> None:
         if not batch_clips:
             return
         embs = embed_batch(model, processor, batch_clips, device)
-        clip1_embs = embs[0::2]
-        clip2_embs = embs[1::2]
-        avg = (clip1_embs + clip2_embs) / 2
-        avg = avg / np.linalg.norm(avg, axis=-1, keepdims=True)
         all_ids.extend(batch_ids)
-        all_embeddings.append(avg)
+        all_embeddings.append(embs)
         batch_ids.clear()
         batch_clips.clear()
 
@@ -122,12 +116,12 @@ def main() -> None:
         if path is None:
             failed.append(tid)
             continue
-        clips = load_audio(path)
-        if clips is None:
+        clip = load_audio(path)
+        if clip is None:
             failed.append(tid)
             continue
         batch_ids.append(tid)
-        batch_clips.extend(clips)
+        batch_clips.append(clip)
         if len(batch_ids) >= args.batch_size:
             flush()
 

@@ -161,6 +161,20 @@ def main() -> None:
         json.dump(out, f, separators=(",", ":"))
     print(f"Saved {len(points)} points -> {out_path} ({out_path.stat().st_size / 1e6:.1f} MB)")
 
+    print("Building genre averages...")
+    genre_arr = np.array(genres)
+    genre_vectors = {}
+    for g in sorted(set(genres)):
+        mean = embeddings[genre_arr == g].mean(axis=0)
+        mean = mean / np.linalg.norm(mean)
+        genre_vectors[g] = [round(float(v), 4) for v in mean]
+    gv_path = out_path.parent / "genre_vectors.json"
+    gv_path.write_text(json.dumps(
+        {"dim": int(embeddings.shape[1]), "genres": genre_vectors},
+        separators=(",", ":"),
+    ))
+    print(f"Saved {len(genre_vectors)} genre averages -> {gv_path}")
+
     for name, model in [("umap_model.pkl", reducer3d), ("umap_model_2d.pkl", reducer2d)]:
         path = out_path.parent / name
         with open(path, "wb") as f:
